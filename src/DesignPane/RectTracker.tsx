@@ -2,7 +2,9 @@ import * as React from 'react';
 import { Rect } from './utils';
 
 export interface IRectTrackerProps extends Rect {
+  /** a flag to indicate if the target component is draggable. */
   draggable?: boolean;
+  /** We can use this prop to hide the RectTracker temporarily. */
   visible:boolean;
   onDragStart?(evt: any): void;
 }

@@ -1,4 +1,5 @@
 export interface IDragAndDropHelper {
+  /** determine if a ReactNode is draggable */
   isDraggable(node: any, index: number): boolean;
 }
 

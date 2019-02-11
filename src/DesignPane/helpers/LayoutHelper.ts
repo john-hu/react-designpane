@@ -3,6 +3,7 @@ import * as ReactDOM from 'react-dom';
 
 export type ReactInfo = {
   container: React.ReactInstance;
+  // the ReactNode of the instance.
   node: React.ReactNode;
   instance: React.ReactInstance;
 };
@@ -15,8 +16,13 @@ export type HTMLTarget = {
   };
 };
 export interface ILayoutHelper {
+  /** determine if the instance can be dropped into container */
   canDrop(reactInfo: ReactInfo): boolean;
-  layout(reactInfo: ReactInfo, layoutTarget: HTMLTarget, x: number, y: number): void;
+  /**
+   * try to layout the UI to display the ghost image at the correct position
+   * @returns anything which will be passed to onLayoutChange callback as the layoutHint
+   */
+  layout(reactInfo: ReactInfo, layoutTarget: HTMLTarget, x: number, y: number): any;
 }
 
 export class FlowLayoutHelper implements ILayoutHelper {
