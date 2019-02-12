@@ -10,6 +10,7 @@
     "declaration": true,
     "moduleResolution": "node",
     "forceConsistentCasingInFileNames": true,
+    "newLine": "lf",
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "noImplicitAny": true,
