@@ -2,12 +2,31 @@ import * as React from 'react';
 import { ILayoutHelper } from './helpers/LayoutHelper';
 import { ITraversalHelper } from './helpers/TraversalHelper';
 
+enum ActionType {
+  /** move a component from one container to another one */
+  MOVE,
+  /** create a component and append to a container*/
+  CREATE,
+  /** delete a component from a container */
+  DELETE
+}
+
 interface IBuilderOptions {
+  /** do we need to wire event listeners and ref and key to the created ReactNodes. */
   cleanBuild?: boolean;
   eventHandlers?: {
     [key: string]: (key: string | null, evt: React.SyntheticEvent<Element, Event>) => void;
   };
 }
+/** The data sturcture of BuilderActions.type === MOVE */
+type ActionMove = {
+  type: ActionType,
+  component: string,
+  toContainer: string,
+  beforeIndex: number
+};
+
+type BuilderActions = ActionMove | null;
 
 type ClassType = string | React.FunctionComponent;
 
@@ -22,6 +41,7 @@ class HierarchyBuilder {
       isContainer: boolean;
       layoutHelper: ILayoutHelper | null;
       node: React.ReactNode;
+      ancestors: string[];
     };
   } = {};
 
@@ -47,38 +67,60 @@ class HierarchyBuilder {
     }
   }
 
-  private createContainer(mapKey: string, node: any, index: number, option: IBuilderOptions): React.ReactNode {
-    this.childrenMeta[mapKey] = {
-      node,
-      index,
-      isContainer: true,
-      layoutHelper: this.traversalHelper.getLayoutHelper(node)
-    };
+  private createContainer(
+    ancestors: string[],
+    mapKey: string,
+    node: any,
+    index: number,
+    option: IBuilderOptions,
+    extraActions: BuilderActions
+  ): React.ReactNode {
     const newProps = { ...node.props };
-    // if in cleanBuild, we don't need to put key, ref, and other event listeners
-    !option.cleanBuild && this.wireExtra(newProps, mapKey, option.eventHandlers);
-    const newChildren = this.getWrappedChildren(option, node.props.children, mapKey);
+    if (!option.cleanBuild) {
+      this.childrenMeta[mapKey] = {
+        node,
+        index,
+        isContainer: true,
+        layoutHelper: this.traversalHelper.getLayoutHelper(node),
+        ancestors
+      };
+      // if in cleanBuild, we don't need to put key, ref, and other event listeners
+      this.wireExtra(newProps, mapKey, option.eventHandlers);
+    }
+    // TODO: check if the movement node is direct child and no need to render it.
+    // TODO: check if the movement node will be moved here and render it.
+    const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey]);
     return this.createElement(node.type as ClassType, newProps, newChildren);
   }
 
-  private createComponent(mapKey: string, node: any, index: number, option: IBuilderOptions): React.ReactNode {
-    this.childrenMeta[mapKey] = {
-      node,
-      index,
-      isContainer: false,
-      layoutHelper: null
-    };
+  private createComponent(
+    ancestors: string[],
+    mapKey: string,
+    node: any,
+    index: number,
+    option: IBuilderOptions,
+    _extraActions: BuilderActions
+  ): React.ReactNode {
     const newProps = { ...node.props };
-    // if in cleanBuild, we don't need to put key, ref, and other event listeners
-    !option.cleanBuild && this.wireExtra(newProps, mapKey, option.eventHandlers);
-    const newChildren = this.getWrappedChildren(option, node.props.children, mapKey);
-    return this.createElement(node.type as ClassType, newProps, newChildren);
+    if (!option.cleanBuild) {
+      this.childrenMeta[mapKey] = {
+        node,
+        index,
+        isContainer: false,
+        layoutHelper: null,
+        ancestors
+      };
+      // if in cleanBuild, we don't need to put key, ref, and other event listeners
+      this.wireExtra(newProps, mapKey, option.eventHandlers);
+    }
+    return this.createElement(node.type as ClassType, newProps, node.props.children);
   }
 
-  private getWrappedChildren(
+  private createChildren(
     option: IBuilderOptions,
     children: React.ReactChildren,
-    parent: string = 'R'
+    ancestors: string[] = ['R'],
+    extraActions: BuilderActions = null
   ): React.ReactNode[] {
     return React.Children.map<React.ReactNode, any>(children, (node: any, index: number) => {
       if (typeof node !== 'object') {
@@ -88,9 +130,9 @@ class HierarchyBuilder {
         const mapKey = node.key ? `${parent}-${node.key}` : `${parent}-${index}`;
         const isContainer = this.traversalHelper.isContainer(node);
         if (isContainer) {
-          return this.createContainer(mapKey, node, index, option);
+          return this.createContainer(ancestors, mapKey, node, index, option, extraActions);
         } else {
-          return this.createComponent(mapKey, node, index, option);
+          return this.createComponent(ancestors, mapKey, node, index, option, extraActions);
         }
       }
     });
@@ -103,10 +145,18 @@ class HierarchyBuilder {
     if (!this.controlledChildren) {
       return null;
     }
-    return this.getWrappedChildren(option, this.controlledChildren);
+    if (!option.cleanBuild) {
+      // if not cleanBuild, we need to rebuild cache.
+      this.childrenMeta = {};
+    }
+    return this.createChildren(option, this.controlledChildren);
   }
-  moveTo(node: React.ReactNode, container: React.ReactNode): React.ReactNode[] | null {
-    return null;
+  moveTo(component: string, toContainer: string, beforeIndex: number): React.ReactNode[] | null {
+    if (!this.controlledChildren) {
+      return null;
+    }
+    const movement: BuilderActions = { type: ActionType.MOVE, component, toContainer, beforeIndex };
+    return this.createChildren({ cleanBuild: true }, this.controlledChildren, ['R'], movement);
   }
   getReactInstance(key: string): React.ReactInstance | null {
     if (this.childrenMeta[key] && this.childrenMeta[key].instance) {
