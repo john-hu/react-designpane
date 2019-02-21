@@ -11,19 +11,22 @@ enum ActionType {
   DELETE
 }
 
-interface IBuilderOptions {
+export interface IBuilderOptions {
   /** do we need to wire event listeners and ref and key to the created ReactNodes. */
   cleanBuild?: boolean;
-  eventHandlers?: {
-    [key: string]: (key: string | null, evt: React.SyntheticEvent<Element, Event>) => void;
+  componentEventHandlers?: {
+    [key: string]: (key: string | null, evt: React.SyntheticEvent<Element, any>) => void;
+  };
+  containerEventHandlers?: {
+    [key: string]: (key: string | null, evt: React.SyntheticEvent<Element, any>) => void;
   };
 }
 /** The data sturcture of BuilderActions.type === MOVE */
 type ActionMove = {
-  type: ActionType,
-  component: string,
-  toContainer: string,
-  beforeIndex: number
+  type: ActionType;
+  component: string;
+  toContainer: string;
+  beforeIndex: number;
 };
 
 type BuilderActions = ActionMove | null;
@@ -31,8 +34,8 @@ type BuilderActions = ActionMove | null;
 type ClassType = string | React.FunctionComponent;
 
 // ref https://reactjs.org/docs/react-api.html to implement everything
-class HierarchyBuilder {
-  controlledChildren: React.ReactChildren | null = null;
+export class HierarchyBuilder {
+  controlledChildren: React.ReactNode | null = null;
   traversalHelper: ITraversalHelper;
   childrenMeta: {
     [key: string]: {
@@ -50,7 +53,9 @@ class HierarchyBuilder {
   }
 
   private bindChildren(key: string, ref: React.ReactInstance): void {
-    this.childrenMeta[key].instance = ref;
+    if (this.childrenMeta[key]) {
+      this.childrenMeta[key].instance = ref;
+    }
   }
 
   private createElement(type: ClassType, props: object, children: React.ReactNode[]): React.ReactNode {
@@ -62,7 +67,7 @@ class HierarchyBuilder {
     props.ref = this.bindChildren.bind(this, key);
     if (extra) {
       for (let extraKey in extra) {
-        props[extraKey] = extra[extraKey];
+        props[extraKey] = extra[extraKey].bind(null, key);
       }
     }
   }
@@ -85,12 +90,32 @@ class HierarchyBuilder {
         ancestors
       };
       // if in cleanBuild, we don't need to put key, ref, and other event listeners
-      this.wireExtra(newProps, mapKey, option.eventHandlers);
+      this.wireExtra(newProps, mapKey, option.containerEventHandlers);
     }
-    // TODO: check if the movement node is direct child and no need to render it.
-    // TODO: check if the movement node will be moved here and render it.
-    const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey]);
-    return this.createElement(node.type as ClassType, newProps, newChildren);
+
+    if (extraActions && extraActions.type === ActionType.MOVE) {
+      const compMeta = this.childrenMeta[extraActions.component];
+      // TODO: we should handle the movement at the same container.. @@
+      if (extraActions.toContainer === mapKey) {
+        // move child to here.
+        const children = [...node.props.children];
+        children.splice(extraActions.beforeIndex, 0, compMeta.node);
+        const mapped = this.createChildren(option, children, [...ancestors, mapKey]);
+        return this.createElement(node.type as ClassType, newProps, mapped);
+      } else if (compMeta.ancestors[compMeta.ancestors.length - 1] === mapKey) {
+        // move child from here.
+        const newChildren = [...node.props.children];
+        newChildren.splice(newChildren.indexOf(compMeta.node), 1);
+        const mapped = this.createChildren(option, newChildren, [...ancestors, mapKey], extraActions);
+        return this.createElement(node.type as ClassType, newProps, mapped);
+      } else {
+        const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey], extraActions);
+        return this.createElement(node.type as ClassType, newProps, newChildren);
+      }
+    } else {
+      const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey], extraActions);
+      return this.createElement(node.type as ClassType, newProps, newChildren);
+    }
   }
 
   private createComponent(
@@ -111,15 +136,15 @@ class HierarchyBuilder {
         ancestors
       };
       // if in cleanBuild, we don't need to put key, ref, and other event listeners
-      this.wireExtra(newProps, mapKey, option.eventHandlers);
+      this.wireExtra(newProps, mapKey, option.componentEventHandlers);
     }
     return this.createElement(node.type as ClassType, newProps, node.props.children);
   }
 
   private createChildren(
     option: IBuilderOptions,
-    children: React.ReactChildren,
-    ancestors: string[] = ['R'],
+    children: React.ReactNode | any[],
+    ancestors: string[] = [ 'R' ],
     extraActions: BuilderActions = null
   ): React.ReactNode[] {
     return React.Children.map<React.ReactNode, any>(children, (node: any, index: number) => {
@@ -127,6 +152,7 @@ class HierarchyBuilder {
         // string, nul, or undefined.
         return node;
       } else {
+        const parent = ancestors[ancestors.length - 1];
         const mapKey = node.key ? `${parent}-${node.key}` : `${parent}-${index}`;
         const isContainer = this.traversalHelper.isContainer(node);
         if (isContainer) {
@@ -138,7 +164,7 @@ class HierarchyBuilder {
     });
   }
 
-  load(children: React.ReactChildren): void {
+  load(children: React.ReactNode | null): void {
     this.controlledChildren = children;
   }
   renderChildren(option: IBuilderOptions): React.ReactNode[] | null {
@@ -156,7 +182,7 @@ class HierarchyBuilder {
       return null;
     }
     const movement: BuilderActions = { type: ActionType.MOVE, component, toContainer, beforeIndex };
-    return this.createChildren({ cleanBuild: true }, this.controlledChildren, ['R'], movement);
+    return this.createChildren({ cleanBuild: true }, this.controlledChildren, [ 'R' ], movement);
   }
   getReactInstance(key: string): React.ReactInstance | null {
     if (this.childrenMeta[key] && this.childrenMeta[key].instance) {
@@ -174,6 +200,10 @@ class HierarchyBuilder {
   getLayoutHelper(key: string): ILayoutHelper | null {
     return this.childrenMeta[key] ? this.childrenMeta[key].layoutHelper : null;
   }
+  getNodeIndex(key: string): number {
+    return this.childrenMeta[key] ? this.childrenMeta[key].index : -1;
+  }
+  getKeys(): string[] {
+    return Object.keys(this.childrenMeta);
+  }
 }
-
-export default HierarchyBuilder;

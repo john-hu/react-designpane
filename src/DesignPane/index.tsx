@@ -2,19 +2,21 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { RectTracker } from './RectTracker';
 import { IDragAndDropHelper, DefaultDnDHelper } from './helpers/DragAndDropHelper';
-import { ILayoutHelper, FlowLayoutHelper } from './helpers/LayoutHelper';
+import { FlowLayoutHelper } from './helpers/LayoutHelper';
 import { ITraversalHelper, DefaultTraversalHelper } from './helpers/TraversalHelper';
+import { HierarchyBuilder } from './HierarchyBuilder';
 import { Rect, calcPosition, getPageOffset } from './utils';
 
 export interface IDesignPaneProps extends React.ComponentProps<'section'> {
   dndHelper?: IDragAndDropHelper;
   traversalHelper?: ITraversalHelper;
 
-  onLayoutChange?(node: any, container: React.ReactNode | null, layoutHint: any): void;
+  onLayoutChange?(children: React.ReactNode[]): void;
   onStartDragging?(node: any): void;
 }
 interface IDesignPaneState {
   draggingTarget: {
+    key: string;
     instance: React.ReactInstance;
     node: React.ReactNode;
     ghost: HTMLElement;
@@ -37,16 +39,7 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
   // refs
   mainContainer: React.RefObject<HTMLElement>;
   rectTracker: React.RefObject<RectTracker>;
-  // wrapper info
-  childrenMeta: {
-    [key: string]: {
-      index: number;
-      instance?: React.ReactInstance;
-      isContainer: boolean;
-      layoutHelper: ILayoutHelper | null;
-      node: React.ReactNode;
-    };
-  } = {};
+  hierarchyBuilder: HierarchyBuilder;
 
   constructor(props: IDesignPaneProps) {
     super(props);
@@ -57,10 +50,14 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
     };
     this.mainContainer = React.createRef();
     this.rectTracker = React.createRef();
+    this.hierarchyBuilder = new HierarchyBuilder(props.traversalHelper || DefaultTraversalHelper);
+    this.hierarchyBuilder.load(props.children);
   }
 
-  bindChildren(index: string, ref: React.ReactInstance) {
-    this.childrenMeta[index].instance = ref;
+  componentWillReceiveProps(nextProps: IDesignPaneProps) {
+    if (nextProps.children !== this.props.children) {
+      this.hierarchyBuilder.load(nextProps.children);
+    }
   }
 
   isRectTrackerEvent = (evt: Event): boolean => {
@@ -103,14 +100,15 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
     let targetElement: HTMLElement | null = null;
     let targetKey: string | null = null;
     // iterate all children to check which one contains the event target.
-    for (let key in this.childrenMeta) {
-      const metaInfo = this.childrenMeta[key];
-      const wrapper: HTMLElement = ReactDOM.findDOMNode(metaInfo.instance!) as HTMLElement;
+    const keys = this.hierarchyBuilder.getKeys();
+    for (let idx in keys) {
+      const instance: React.ReactInstance = this.hierarchyBuilder.getReactInstance(keys[idx])!;
+      const wrapper: HTMLElement = ReactDOM.findDOMNode(instance) as HTMLElement;
       const isTarget = wrapper.contains(evt.nativeEvent.target as Node);
       if (isTarget) {
         targetElement = wrapper;
-        targetKey = key;
-        if (!metaInfo.isContainer) {
+        targetKey = keys[idx];
+        if (!this.hierarchyBuilder.isContainer(keys[idx])) {
           break;
         }
       }
@@ -131,8 +129,9 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
     const { onStartDragging } = this.props;
     const { rectTrackerInfo } = this.state;
     const draggingTarget = {
-      instance: this.childrenMeta[key].instance!,
-      node: this.childrenMeta[key].node,
+      key: key,
+      instance: this.hierarchyBuilder.getReactInstance(key)!,
+      node: this.hierarchyBuilder.getReactNode(key)!,
       ghost: document.createElement('div')
     };
     const nativeEvt: DragEvent = evt.nativeEvent;
@@ -156,9 +155,9 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
     const { node, instance, ghost } = this.state.draggingTarget!;
     const nativeEvt: DragEvent = evt.nativeEvent;
     const container = key
-      ? this.childrenMeta[key].instance!
+      ? this.hierarchyBuilder.getReactInstance(key)!
       : (this.mainContainer.current as Element);
-    const layoutHelper = key ? this.childrenMeta[key].layoutHelper! : new FlowLayoutHelper();
+    const layoutHelper = key ? this.hierarchyBuilder.getLayoutHelper(key)! : new FlowLayoutHelper();
     const reactInfo = { container, node, instance };
     // remove the ghost node when trying to fit the position
     ghost.parentNode && ghost.parentNode.removeChild(ghost);
@@ -188,53 +187,24 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
   };
 
   handleDropped = (key: string | null, evt: React.SyntheticEvent<Element, DragEvent>): void => {
+    debugger;
     const { onLayoutChange } = this.props;
     const { draggingTarget } = this.state;
-    const container: React.ReactNode | null = key ? this.childrenMeta[key].node : null;
-    draggingTarget &&
-      onLayoutChange &&
-      onLayoutChange(draggingTarget.node, container, this.layoutHint);
+    if (!key || !draggingTarget) {
+      return;
+    }
+    const newChildren = this.hierarchyBuilder.moveTo(draggingTarget.key, key, this.layoutHint);
+    newChildren && onLayoutChange && onLayoutChange(newChildren);
     this.resetDraggingTarget();
     evt.preventDefault();
+    evt.stopPropagation();
   };
 
-  getWrappedChildren(children: React.ReactNode, parent: string = 'R'): any {
-    const { traversalHelper } = this.props;
-    const travHelper = traversalHelper || DefaultTraversalHelper;
-    return React.Children.map<any, any>(children, (node: any, index: number) => {
-      if (typeof node !== 'object') {
-        return node;
-      } else {
-        const Comp = node.type;
-        const mapKey = node.key ? `${parent}-${node.key}` : `${parent}-${index}`;
-        const isContainer = travHelper.isContainer(node);
-        if (isContainer) {
-          this.childrenMeta[mapKey] = {
-            node,
-            index,
-            isContainer,
-            layoutHelper: travHelper.getLayoutHelper(node)
-          };
-          return (
-            <Comp
-              {...node.props}
-              key={node.key}
-              ref={this.bindChildren.bind(this, mapKey)}
-              onDragOver={this.handleDraggedOver.bind(this, mapKey)}
-              onDrop={this.handleDropped.bind(this, mapKey)}
-            >
-              {this.getWrappedChildren(node.props.children, mapKey)}
-            </Comp>
-          );
-        } else {
-          this.childrenMeta[mapKey] = {
-            node,
-            index,
-            isContainer,
-            layoutHelper: null
-          };
-          return <Comp {...node.props} key={node.key} ref={this.bindChildren.bind(this, mapKey)} />;
-        }
+  getWrappedChildren(): any {
+    return this.hierarchyBuilder.renderChildren({
+      containerEventHandlers: {
+        onDragOver: this.handleDraggedOver,
+        onDrop: this.handleDropped
       }
     });
   }
@@ -245,7 +215,9 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
       // no need to display tracker when it has no focus, no info.
       return;
     }
-    const { node, index } = this.childrenMeta[focusedKey];
+    // const { node, index } = this.childrenMeta[focusedKey];
+    const node = this.hierarchyBuilder.getReactNode(focusedKey);
+    const index = this.hierarchyBuilder.getNodeIndex(focusedKey);
     const draggable = dndHelper.isDraggable(node, index);
     // We should hide itself when dragging.
     return (
@@ -272,7 +244,6 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
       ...style,
       ...DesignPane.style
     };
-    this.childrenMeta = {};
     return (
       <section
         {...restProps}
@@ -281,10 +252,8 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
         onMouseDownCapture={this.handleMouseDown}
         onMouseUpCapture={this.handleMouseLeaveUp}
         onMouseLeave={this.handleMouseLeaveUp}
-        onDragOver={this.handleDraggedOver.bind(this, null)}
-        onDrop={this.handleDropped.bind(this, null)}
       >
-        {this.getWrappedChildren(children)}
+        {this.getWrappedChildren()}
         {this.renderRectTracker(dndHelper)}
       </section>
     );
