@@ -13,7 +13,10 @@ export interface IDesignPaneProps extends React.ComponentProps<'section'> {
 
   onLayoutChange?(children: React.ReactNode[]): void;
   onStartDragging?(node: any): void;
+  // Since we will remove the onDrop, onDragOver of root container, the children should be only one
+  // ReactNode which should be a container.
 }
+
 interface IDesignPaneState {
   draggingTarget: {
     key: string;
@@ -101,6 +104,8 @@ export default class DesignPane extends React.PureComponent<IDesignPaneProps, ID
     let targetKey: string | null = null;
     // iterate all children to check which one contains the event target.
     const keys = this.hierarchyBuilder.getKeys();
+    // TODO: We should change the implementation to leverage layout manager to detect which
+    // component is under the cursor.
     for (let idx in keys) {
       const instance: React.ReactInstance = this.hierarchyBuilder.getReactInstance(keys[idx])!;
       const wrapper: HTMLElement = ReactDOM.findDOMNode(instance) as HTMLElement;

@@ -15,6 +15,12 @@ export type HTMLTarget = {
     y: number;
   };
 };
+
+/**
+ * The purpose of LayoutHelper:
+ * 1. check if an element can be a container for receiving the dragging component
+ * 2. calculate the layout hint by layout. currently, the layout hint is the insert position.
+ */
 export interface ILayoutHelper {
   /** determine if the instance can be dropped into container */
   canDrop(reactInfo: ReactInfo): boolean;
