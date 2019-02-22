@@ -21,7 +21,7 @@ export const getChildOffset = (container: HTMLElement): Offset => {
 export const getPageOffset = (decendent: HTMLElement, pageContainer: HTMLElement): Offset => {
   const offset: Offset = getChildOffset(decendent);
   let target: HTMLElement | null = decendent.parentElement;
-  while(target && target !== pageContainer) {
+  while (target && target !== pageContainer) {
     const parentOffset = getChildOffset(target);
     offset.x += parentOffset.x;
     offset.y += parentOffset.y;

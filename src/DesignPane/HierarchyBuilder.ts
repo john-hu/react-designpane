@@ -58,8 +58,12 @@ export class HierarchyBuilder {
     }
   }
 
-  private createElement(type: ClassType, props: object, children: React.ReactNode[]): React.ReactNode {
-    return React.createElement.apply(React, [ type, props, ...children ]);
+  private createElement(
+    type: ClassType,
+    props: object,
+    children: React.ReactNode[]
+  ): React.ReactNode {
+    return React.createElement.apply(React, [type, props, ...children]);
   }
 
   private wireExtra(props: any, key: string, extra?: object): void {
@@ -106,14 +110,29 @@ export class HierarchyBuilder {
         // move child from here.
         const newChildren = [...node.props.children];
         newChildren.splice(newChildren.indexOf(compMeta.node), 1);
-        const mapped = this.createChildren(option, newChildren, [...ancestors, mapKey], extraActions);
+        const mapped = this.createChildren(
+          option,
+          newChildren,
+          [...ancestors, mapKey],
+          extraActions
+        );
         return this.createElement(node.type as ClassType, newProps, mapped);
       } else {
-        const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey], extraActions);
+        const newChildren = this.createChildren(
+          option,
+          node.props.children,
+          [...ancestors, mapKey],
+          extraActions
+        );
         return this.createElement(node.type as ClassType, newProps, newChildren);
       }
     } else {
-      const newChildren = this.createChildren(option, node.props.children, [...ancestors, mapKey], extraActions);
+      const newChildren = this.createChildren(
+        option,
+        node.props.children,
+        [...ancestors, mapKey],
+        extraActions
+      );
       return this.createElement(node.type as ClassType, newProps, newChildren);
     }
   }
@@ -144,7 +163,7 @@ export class HierarchyBuilder {
   private createChildren(
     option: IBuilderOptions,
     children: React.ReactNode | any[],
-    ancestors: string[] = [ 'R' ],
+    ancestors: string[] = ['R'],
     extraActions: BuilderActions = null
   ): React.ReactNode[] {
     return React.Children.map<React.ReactNode, any>(children, (node: any, index: number) => {
@@ -182,7 +201,7 @@ export class HierarchyBuilder {
       return null;
     }
     const movement: BuilderActions = { type: ActionType.MOVE, component, toContainer, beforeIndex };
-    return this.createChildren({ cleanBuild: true }, this.controlledChildren, [ 'R' ], movement);
+    return this.createChildren({ cleanBuild: true }, this.controlledChildren, ['R'], movement);
   }
   getReactInstance(key: string): React.ReactInstance | null {
     if (this.childrenMeta[key] && this.childrenMeta[key].instance) {

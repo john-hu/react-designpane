@@ -20,7 +20,7 @@ export default class App extends Component {
     };
   }
 
-  handleLayoutChanged = (children) => {
+  handleLayoutChanged = children => {
     this.setState({ children });
   };
 

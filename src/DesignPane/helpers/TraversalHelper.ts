@@ -14,7 +14,7 @@ export const DefaultTraversalHelper: ITraversalHelper = {
     if (!node) {
       return false;
     } else if (typeof (node as React.ReactElement<any>).type === 'string') {
-      const typeName:string = (node as React.ReactElement<any>).type as string;
+      const typeName: string = (node as React.ReactElement<any>).type as string;
       return containerElements.indexOf(typeName) > -1;
     } else {
       return false;

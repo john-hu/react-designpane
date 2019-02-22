@@ -5,7 +5,7 @@ export interface IRectTrackerProps extends Rect {
   /** a flag to indicate if the target component is draggable. */
   draggable?: boolean;
   /** We can use this prop to hide the RectTracker temporarily. */
-  visible:boolean;
+  visible: boolean;
   onDragStart?(evt: any): void;
 }
 
@@ -28,7 +28,7 @@ export class RectTracker extends React.PureComponent<IRectTrackerProps, {}> {
       left: x,
       position: 'absolute',
       top: y,
-      width,
+      width
     };
 
     return <div style={style} draggable={draggable} onDragStart={onDragStart} />;
